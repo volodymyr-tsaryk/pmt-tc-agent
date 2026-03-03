@@ -1,4 +1,8 @@
+import fs from "fs";
+import path from "path";
 import { ProjectManagerAdapter, Task, TaskStatus } from "./interface";
+
+const COMMENTS_DIR = path.resolve("comments");
 
 const mockTasks: Record<string, Task> = {
   "TRELLO-001": {
@@ -74,6 +78,11 @@ export class TrelloAdapter implements ProjectManagerAdapter {
   async addComment(taskId: string, comment: string): Promise<void> {
     // TODO: replace with real API call
     console.log(`[TrelloAdapter] addComment("${taskId}", "${comment.substring(0, 80)}...")`);
+    fs.mkdirSync(COMMENTS_DIR, { recursive: true });
+    const file = path.join(COMMENTS_DIR, `${taskId}.md`);
+    const entry = `<!-- ${new Date().toISOString()} -->\n${comment}\n\n---\n\n`;
+    fs.appendFileSync(file, entry, "utf8");
+    console.log(`[TrelloAdapter] Comment saved to ${file}`);
   }
 
   async setStatus(taskId: string, status: TaskStatus): Promise<void> {
