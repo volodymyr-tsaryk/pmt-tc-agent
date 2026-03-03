@@ -16,3 +16,9 @@ npm-debug.log*
 
 # OS files
 .DS_Store
+
+# IDE directories
+.idea/
+
+# Claude session data
+.claude/
