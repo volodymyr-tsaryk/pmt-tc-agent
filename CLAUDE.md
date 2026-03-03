@@ -1,3 +1,5 @@
+we are working in "/Users/vtsaryk/Library/CloudStorage/Dropbox/Artvens Digital Agency/sites/pmt-tc-agent" and that is valid directory.
+
 # Task Analyzer Agent — Project Scaffold
 
 ## Overview
