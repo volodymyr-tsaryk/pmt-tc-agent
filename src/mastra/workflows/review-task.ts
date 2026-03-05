@@ -4,6 +4,7 @@
 import { ProjectManagerAdapter, Task } from "../../adapters/interface";
 import { ProjectConfig } from "../../config/project";
 import { createTaskAnalyzerAgent } from "../agents/task-analyzer";
+import { logEvent, upsertAgentStatus } from "../../store/event-store";
 
 interface CheckDescriptionResult {
   taskId: string;
@@ -21,13 +22,14 @@ async function checkDescription(
   adapter: ProjectManagerAdapter,
   config: ProjectConfig
 ): Promise<CheckDescriptionResult> {
-  console.log(`[Workflow] checkDescription: fetching task ${taskId}`);
+  logEvent("workflow", `checkDescription: fetching task ${taskId}`, { taskId });
   const task = await adapter.getTask(taskId);
 
   const { minDescriptionLength, requiredFields } = config.reviewCriteria;
 
   // Check minimum description length
   if (task.description.length < minDescriptionLength) {
+    logEvent("workflow", `description too short (${task.description.length} < ${minDescriptionLength})`, { taskId, level: "warn" });
     return {
       taskId,
       task,
@@ -40,6 +42,7 @@ async function checkDescription(
   for (const field of requiredFields) {
     const value = (task as unknown as Record<string, unknown>)[field];
     if (value === undefined || value === null || value === "") {
+      logEvent("workflow", `missing required field: "${field}"`, { taskId, level: "warn" });
       return {
         taskId,
         task,
@@ -49,6 +52,7 @@ async function checkDescription(
     }
   }
 
+  logEvent("workflow", "checkDescription passed", { taskId });
   return {
     taskId,
     task,
@@ -70,13 +74,14 @@ async function analyzeOrRemind(
   const { taskId, task, passed, reason } = result;
 
   if (passed) {
-    console.log(`[Workflow] analyzeOrRemind: task ${taskId} passed — running agent`);
+    logEvent("workflow", `task ${taskId} passed — running agent`, { taskId });
     const agent = createTaskAnalyzerAgent(config, adapter);
     await agent.generate(
       `Please analyze this task and produce either a Development Plan or Clarifying Questions.\n\nTask ID: ${taskId}\nTitle: ${task.title}\nDescription: ${task.description}`
     );
+    logEvent("agent", `generated response for task ${taskId}`, { taskId });
   } else {
-    console.log(`[Workflow] analyzeOrRemind: task ${taskId} did not pass — posting reminder`);
+    logEvent("workflow", `task ${taskId} did not pass — posting reminder`, { taskId, level: "warn" });
     const reminder =
       `[TaskAnalyzer] This task needs more detail before it can be developed.\n\n` +
       `Reason: ${reason}\n\n` +
@@ -103,18 +108,27 @@ export function createReviewTaskWorkflow(
   config: ProjectConfig,
   adapter: ProjectManagerAdapter
 ) {
+  const adapterName = adapter.source;
+  const agentName = `TaskAnalyzer-${config.name}`;
+
   return {
     async run(taskId: string): Promise<void> {
-      // Step 1: checkDescription
-      const checkResult = await checkDescription(taskId, adapter, config);
-      console.log(
-        `[Workflow] checkDescription result: passed=${checkResult.passed}, reason="${checkResult.reason}"`
-      );
+      upsertAgentStatus(agentName, {
+        adapter: adapterName,
+        lastStatus: "processing",
+        lastRunAt: new Date().toISOString(),
+        lastTaskId: taskId,
+      });
+      logEvent("workflow", `started review for ${taskId}`, { taskId, adapter: adapterName });
 
-      // Step 2: analyzeOrRemind
+      const checkResult = await checkDescription(taskId, adapter, config);
+      logEvent("workflow", `checkDescription: passed=${checkResult.passed}, reason="${checkResult.reason}"`, { taskId });
+
       await analyzeOrRemind(checkResult, adapter, config);
 
-      console.log(`[Workflow] review-task workflow completed for task ${taskId}`);
+      const finalStatus = checkResult.passed ? "plan_written" : "needs_clarification";
+      upsertAgentStatus(agentName, { lastStatus: finalStatus });
+      logEvent("workflow", `completed — status: ${finalStatus}`, { taskId, adapter: adapterName });
     },
   };
 }
