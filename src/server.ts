@@ -1,9 +1,11 @@
 import express, { Request, Response, NextFunction } from "express";
+import path from "path";
 import { ProjectManagerAdapter } from "./adapters/interface";
 import { ProjectConfig, defaultProjectConfig } from "./config/project";
 import { TrelloAdapter } from "./adapters/trello";
 import { AsanaAdapter } from "./adapters/asana";
 import { createReviewTaskWorkflow } from "./mastra/workflows/review-task";
+import { getEvents, getAgentStatuses } from "./store/event-store";
 
 const trelloAdapter = new TrelloAdapter();
 const asanaAdapter = new AsanaAdapter();
@@ -23,6 +25,12 @@ export function createServer(): express.Application {
   const app = express();
   app.use(express.json());
 
+  app.use(express.static(path.join(__dirname, "..", "public")));
+
+  app.get("/", (_req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+  });
+
   // Request logging middleware
   app.use((req: Request, _res: Response, next: NextFunction) => {
     const timestamp = new Date().toISOString();
@@ -33,6 +41,14 @@ export function createServer(): express.Application {
   // Health check
   app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", adapters: ["trello", "asana"] });
+  });
+
+  app.get("/api/status", (_req: Request, res: Response) => {
+    res.json(getAgentStatuses());
+  });
+
+  app.get("/api/logs", (_req: Request, res: Response) => {
+    res.json(getEvents(100));
   });
 
   // Trello webhook
