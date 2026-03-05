@@ -41,7 +41,12 @@ async function checkDescription(
   // Check required fields are present and non-empty
   for (const field of requiredFields) {
     const value = (task as unknown as Record<string, unknown>)[field];
-    if (value === undefined || value === null || value === "") {
+    if (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      (Array.isArray(value) && value.length === 0)
+    ) {
       logEvent("workflow", `missing required field: "${field}"`, { taskId, level: "warn" });
       return {
         taskId,
@@ -121,14 +126,20 @@ export function createReviewTaskWorkflow(
       });
       logEvent("workflow", `started review for ${taskId}`, { taskId, adapter: adapterName });
 
-      const checkResult = await checkDescription(taskId, adapter, config);
-      logEvent("workflow", `checkDescription: passed=${checkResult.passed}, reason="${checkResult.reason}"`, { taskId });
+      try {
+        const checkResult = await checkDescription(taskId, adapter, config);
+        logEvent("workflow", `checkDescription: passed=${checkResult.passed}, reason="${checkResult.reason}"`, { taskId });
 
-      await analyzeOrRemind(checkResult, adapter, config);
+        await analyzeOrRemind(checkResult, adapter, config);
 
-      const finalStatus = checkResult.passed ? "plan_written" : "needs_clarification";
-      upsertAgentStatus(agentName, { lastStatus: finalStatus });
-      logEvent("workflow", `completed — status: ${finalStatus}`, { taskId, adapter: adapterName });
+        const finalStatus = checkResult.passed ? "plan_written" : "needs_clarification";
+        upsertAgentStatus(agentName, { lastStatus: finalStatus });
+        logEvent("workflow", `completed — status: ${finalStatus}`, { taskId, adapter: adapterName });
+      } catch (err) {
+        upsertAgentStatus(agentName, { lastStatus: "error" });
+        logEvent("workflow", `error: ${err instanceof Error ? err.message : String(err)}`, { taskId, level: "error" });
+        throw err;
+      }
     },
   };
 }
