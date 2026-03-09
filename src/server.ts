@@ -118,9 +118,9 @@ export function createServer(): express.Application {
         const owner = payload.repository.owner.login;
         const repo = payload.repository.name;
         const taskId = `${owner}/${repo}#${payload.issue.number}`;
-        const config = await githubAdapter.fetchRepoConfig(owner, repo);
 
         res.status(202).json({ status: "accepted", taskId });
+        const config = await githubAdapter.fetchRepoConfig(owner, repo);
         await handleTaskEvent(taskId, githubAdapter, config);
 
       } else if (event === "issue_comment") {
@@ -142,9 +142,9 @@ export function createServer(): express.Application {
         const owner = payload.repository.owner.login;
         const repo = payload.repository.name;
         const taskId = `${owner}/${repo}#${payload.issue.number}`;
-        const config = await githubAdapter.fetchRepoConfig(owner, repo);
 
         res.status(202).json({ status: "accepted", taskId });
+        const config = await githubAdapter.fetchRepoConfig(owner, repo);
         await handleTaskEvent(taskId, githubAdapter, config);
 
       } else {
