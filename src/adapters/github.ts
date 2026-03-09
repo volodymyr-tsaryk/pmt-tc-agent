@@ -1,5 +1,7 @@
 import { Octokit } from "@octokit/rest";
+import matter from "gray-matter";
 import { ProjectManagerAdapter, Task, TaskStatus } from "./interface";
+import { ProjectConfig, defaultProjectConfig } from "../config/project";
 
 export class GitHubAdapter implements ProjectManagerAdapter {
   source = "github" as const;
@@ -96,5 +98,46 @@ export class GitHubAdapter implements ProjectManagerAdapter {
     }
 
     console.log(`[GitHubAdapter] Label "${labelToAdd}" added to ${taskId}`);
+  }
+
+  async fetchRepoConfig(owner: string, repo: string): Promise<ProjectConfig> {
+    try {
+      const { data: fileData } = await this.octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path: ".github/task-ai.md",
+      });
+
+      if (Array.isArray(fileData) || fileData.type !== "file") {
+        console.warn(`[GitHubAdapter] .github/task-ai.md is not a file in ${owner}/${repo}, using default config`);
+        return defaultProjectConfig;
+      }
+
+      const content = Buffer.from(fileData.content, "base64").toString("utf8");
+      const { data: frontmatter } = matter(content);
+
+      return {
+        name: frontmatter.name ?? `${owner}/${repo}`,
+        techStack: frontmatter.techStack ?? defaultProjectConfig.techStack,
+        conventions: frontmatter.conventions ?? defaultProjectConfig.conventions,
+        reviewCriteria: {
+          minDescriptionLength:
+            frontmatter.reviewCriteria?.minDescriptionLength ??
+            defaultProjectConfig.reviewCriteria.minDescriptionLength,
+          requiredFields:
+            frontmatter.reviewCriteria?.requiredFields ??
+            defaultProjectConfig.reviewCriteria.requiredFields,
+        },
+        knowledge: { enabled: false }, // Phase 2: parse body for RAG
+      };
+    } catch (err: unknown) {
+      const errStatus = (err as { status?: number }).status;
+      if (errStatus === 404) {
+        console.warn(`[GitHubAdapter] .github/task-ai.md not found in ${owner}/${repo}, using default config`);
+      } else {
+        console.error(`[GitHubAdapter] Failed to fetch repo config for ${owner}/${repo}:`, err);
+      }
+      return defaultProjectConfig;
+    }
   }
 }
