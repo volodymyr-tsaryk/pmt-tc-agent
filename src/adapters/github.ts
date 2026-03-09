@@ -53,7 +53,8 @@ export class GitHubAdapter implements ProjectManagerAdapter {
   }
 
   async addComment(taskId: string, comment: string): Promise<void> {
-    console.log(`[GitHubAdapter] addComment("${taskId}", "${comment.substring(0, 80)}...")`);
+    const preview = comment.length > 80 ? comment.substring(0, 80) + "..." : comment;
+    console.log(`[GitHubAdapter] addComment("${taskId}", "${preview}")`);
     const { owner, repo, issueNumber } = this.parseTaskId(taskId);
 
     await this.octokit.rest.issues.createComment({
