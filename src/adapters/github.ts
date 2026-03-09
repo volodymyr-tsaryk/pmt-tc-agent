@@ -1,17 +1,15 @@
+import { Octokit } from "@octokit/rest";
 import { ProjectManagerAdapter, Task, TaskStatus } from "./interface";
 
 export class GitHubAdapter implements ProjectManagerAdapter {
   source = "github" as const;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private octokitPromise: Promise<any>;
+  private octokit: Octokit;
   readonly triggerLabel: string;
   readonly mention: string;
 
   constructor(token: string, triggerLabel: string, mention: string) {
-    this.octokitPromise = import("@octokit/rest").then(
-      ({ Octokit }) => new Octokit({ auth: token })
-    );
+    this.octokit = new Octokit({ auth: token });
     this.triggerLabel = triggerLabel;
     this.mention = mention;
   }
