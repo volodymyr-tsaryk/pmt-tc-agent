@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Analyzer Agent — Architecture & Technical Report</title>
+<style>
+  :root {
+    --accent: #4f46e5;
+    --accent-light: #eef2ff;
+    --accent-mid: #6366f1;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --yellow: #d97706;
+    --yellow-light: #fef3c7;
+    --gray: #6b7280;
+    --gray-light: #f9fafb;
+    --border: #e5e7eb;
+    --text: #111827;
+    --text-secondary: #374151;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: var(--text);
+    background: white;
+  }
+
+  /* ── COVER PAGE ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 60px 40px;
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+    color: white;
+    page-break-after: always;
+  }
+  .cover-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 20px;
+    padding: 6px 18px;
+    font-size: 10pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+  }
+  .cover h1 {
+    font-size: 36pt;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+  .cover h1 span { color: #a5b4fc; }
+  .cover .subtitle {
+    font-size: 14pt;
+    color: rgba(255,255,255,0.75);
+    max-width: 500px;
+    margin: 0 auto 48px;
+    line-height: 1.5;
+  }
+  .cover-meta {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .cover-meta-item { text-align: center; }
+  .cover-meta-item .label {
+    font-size: 8pt;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 4px;
+  }
+  .cover-meta-item .value {
+    font-size: 11pt;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+  }
+  .cover-divider {
+    width: 80px;
+    height: 3px;
+    background: linear-gradient(90deg, #818cf8, #a5b4fc);
+    margin: 40px auto;
+    border-radius: 2px;
+  }
+
+  /* ── LAYOUT ── */
+  .page {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 48px 48px 60px;
+  }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 48px 0 24px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border);
+  }
+  .section-number {
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    color: white;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12pt;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .section-header h2 {
+    font-size: 18pt;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  h3 {
+    font-size: 13pt;
+    font-weight: 700;
+    color: var(--text);
+    margin: 28px 0 10px;
+  }
+
+  h4 {
+    font-size: 11pt;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 16px 0 6px;
+  }
+
+  p { margin-bottom: 10px; color: var(--text-secondary); }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-left: 4px solid;
+  }
+  .callout.info { background: var(--accent-light); border-color: var(--accent); }
+  .callout.success { background: var(--green-light); border-color: var(--green); }
+  .callout.warning { background: var(--yellow-light); border-color: var(--yellow); }
+  .callout.danger { background: var(--red-light); border-color: var(--red); }
+  .callout strong { display: block; margin-bottom: 4px; font-size: 10pt; letter-spacing: 0.05em; text-transform: uppercase; }
+  .callout.info strong { color: var(--accent); }
+  .callout.success strong { color: var(--green); }
+  .callout.warning strong { color: var(--yellow); }
+  .callout.danger strong { color: var(--red); }
+
+  /* ── CODE ── */
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace;
+    font-size: 9pt;
+    background: var(--gray-light);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #be185d;
+  }
+  pre {
+    background: #1e1b4b;
+    color: #e0e7ff;
+    border-radius: 10px;
+    padding: 18px 20px;
+    font-family: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+    font-size: 8.5pt;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  pre .comment { color: #6b7280; }
+  pre .keyword { color: #818cf8; }
+  pre .string { color: #86efac; }
+  pre .type { color: #fcd34d; }
+
+  /* ── TABLES ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 10pt;
+  }
+  th {
+    background: var(--accent);
+    color: white;
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 600;
+    font-size: 9.5pt;
+    letter-spacing: 0.03em;
+  }
+  th:first-child { border-radius: 8px 0 0 0; }
+  th:last-child { border-radius: 0 8px 0 0; }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    color: var(--text-secondary);
+  }
+  tr:nth-child(even) td { background: var(--gray-light); }
+  tr:last-child td:first-child { border-radius: 0 0 0 8px; }
+  tr:last-child td:last-child { border-radius: 0 0 8px 0; }
+
+  /* ── TAGS ── */
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 8.5pt;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .tag-green { background: var(--green-light); color: var(--green); }
+  .tag-red { background: var(--red-light); color: var(--red); }
+  .tag-yellow { background: var(--yellow-light); color: var(--yellow); }
+  .tag-blue { background: var(--accent-light); color: var(--accent); }
+  .tag-gray { background: #f3f4f6; color: #6b7280; }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .diagram-container {
+    background: #fafafa;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin: 24px 0;
+    overflow: hidden;
+  }
+
+  /* ── COMPONENT CARDS ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    background: white;
+  }
+  .card-icon {
+    font-size: 20pt;
+    margin-bottom: 8px;
+  }
+  .card h4 { margin-top: 0; font-size: 11pt; }
+  .card p { font-size: 9.5pt; margin-bottom: 0; }
+
+  /* ── CHALLENGE ITEMS ── */
+  .challenge {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 16px 0;
+    overflow: hidden;
+  }
+  .challenge-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--gray-light);
+    border-bottom: 1px solid var(--border);
+  }
+  .challenge-num {
+    width: 24px;
+    height: 24px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9pt;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .challenge-header strong { font-size: 10.5pt; color: var(--text); }
+  .challenge-body { padding: 14px 16px; }
+  .challenge-label {
+    font-size: 8.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray);
+    margin-bottom: 4px;
+  }
+  .challenge-body p { font-size: 10pt; margin-bottom: 10px; }
+  .challenge-body p:last-child { margin-bottom: 0; }
+  .challenge-body .resolution { color: var(--green); }
+
+  /* ── SECURITY ITEMS ── */
+  .security-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .security-item {
+    border-radius: 10px;
+    padding: 14px 16px;
+    border: 1px solid;
+  }
+  .security-fixed {
+    background: var(--green-light);
+    border-color: #bbf7d0;
+  }
+  .security-remaining {
+    background: var(--yellow-light);
+    border-color: #fde68a;
+  }
+  .security-item .icon { font-size: 18pt; margin-bottom: 6px; }
+  .security-item strong { font-size: 10.5pt; color: var(--text); display: block; margin-bottom: 4px; }
+  .security-item p { font-size: 9.5pt; margin-bottom: 0; }
+  .security-fixed p { color: #166534; }
+  .security-remaining p { color: #92400e; }
+
+  /* ── IMPROVEMENT ITEMS ── */
+  .improvement {
+    display: flex;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .improvement:last-child { border-bottom: none; }
+  .improvement-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14pt;
+    flex-shrink: 0;
+    background: var(--accent-light);
+  }
+  .improvement-content strong { font-size: 10.5pt; display: block; margin-bottom: 2px; }
+  .improvement-content p { font-size: 9.5pt; margin-bottom: 0; }
+
+  /* ── PAGE BREAKS ── */
+  .page-break { page-break-before: always; }
+
+  /* ── TOC ── */
+  .toc {
+    background: var(--gray-light);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin: 32px 0;
+  }
+  .toc h3 { margin-top: 0; font-size: 12pt; margin-bottom: 16px; }
+  .toc ol { padding-left: 20px; }
+  .toc li { padding: 5px 0; color: var(--accent); font-size: 11pt; }
+  .toc li a { color: var(--accent); text-decoration: none; }
+
+  /* ── FLOW DIAGRAM SVG ── */
+  .flow-diagram svg { width: 100%; height: auto; }
+
+  /* ── FILE TREE ── */
+  .file-tree {
+    font-family: 'JetBrains Mono', Menlo, monospace;
+    font-size: 9pt;
+    background: var(--gray-light);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+  }
+  .file-tree .dir { color: var(--accent); font-weight: 600; }
+  .file-tree .comment { color: #9ca3af; }
+
+  @media print {
+    .cover { min-height: 0; height: 100vh; }
+    .page-break { page-break-before: always; }
+    body { font-size: 10pt; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════ COVER PAGE ══════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-badge">Architecture &amp; Technical Report</div>
+  <h1>Task Analyzer<br><span>Agent</span></h1>
+  <p class="subtitle">AI-powered webhook agent that analyzes project management tasks and generates development plans using Claude AI</p>
+  <div class="cover-divider"></div>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <div class="label">Version</div>
+      <div class="value">1.0 — Phase 1</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Date</div>
+      <div class="value">March 2026</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Runtime</div>
+      <div class="value">Node.js + TypeScript</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">AI Model</div>
+      <div class="value">Claude Sonnet 4.5</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="label">Integrations</div>
+      <div class="value">GitHub · Trello · Asana</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ MAIN CONTENT ══════════════════════════════════════ -->
+<div class="page">
+
+  <!-- TABLE OF CONTENTS -->
+  <div class="toc">
+    <h3>Table of Contents</h3>
+    <ol>
+      <li><a href="#overview">System Overview</a></li>
+      <li><a href="#architecture">Architecture Diagram</a></li>
+      <li><a href="#components">Component Reference</a></li>
+      <li><a href="#flow">Request Flow</a></li>
+      <li><a href="#challenges">Challenges &amp; Resolutions</a></li>
+      <li><a href="#security">Security: Fixed &amp; Remaining</a></li>
+      <li><a href="#improvements">Future Improvements</a></li>
+      <li><a href="#env">Environment Variables</a></li>
+    </ol>
+  </div>
+
+  <!-- ── SECTION 1: OVERVIEW ── -->
+  <div id="overview" class="section-header">
+    <div class="section-number">1</div>
+    <h2>System Overview</h2>
+  </div>
+
+  <p>The <strong>Task Analyzer Agent</strong> is a Node.js/TypeScript webhook service that listens for events from project management tools (GitHub Issues, Trello, Asana) and uses <strong>Claude AI</strong> to automatically analyze the incoming task. Based on the analysis, it either:</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">📋</div>
+      <h4>Writes a Development Plan</h4>
+      <p>When a task is sufficiently detailed, the agent produces a structured plan including technical approach, files to change, test plan, risks, and effort estimate.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">❓</div>
+      <h4>Asks Clarifying Questions</h4>
+      <p>When a task lacks necessary detail (too short, vague goal, missing fields), the agent posts targeted questions back to the task as a comment.</p>
+    </div>
+  </div>
+
+  <p>The system also supports a <strong>conversation mode</strong> — when users reply to clarifying questions via a mention comment (e.g., <code>@task-ai</code>), the agent re-reads the full thread, incorporates the new answers, and either produces a plan or asks remaining questions.</p>
+
+  <div class="callout info">
+    <strong>Current Status</strong>
+    Phase 1 is complete: GitHub Issues integration is fully functional with real API calls. Trello and Asana adapters are implemented as mocks pending real API credentials (Phase 2).
+  </div>
+
+  <!-- ── SECTION 2: ARCHITECTURE DIAGRAM ── -->
+  <div id="architecture" class="page-break section-header">
+    <div class="section-number">2</div>
+    <h2>Architecture Diagram</h2>
+  </div>
+
+  <p>The diagram below shows all major system components and how they interact at runtime.</p>
+
+  <div class="diagram-container flow-diagram">
+    <svg viewBox="0 0 740 640" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+          <polygon points="0 0, 8 3.5, 0 7" fill="#6366f1"/>
+        </marker>
+        <marker id="arrow-gray" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+          <polygon points="0 0, 8 3.5, 0 7" fill="#9ca3af"/>
+        </marker>
+        <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+          <polygon points="0 0, 8 3.5, 0 7" fill="#16a34a"/>
+        </marker>
+      </defs>
+
+      <!-- ── ROW 1: External Sources ── -->
+      <!-- GitHub -->
+      <rect x="20" y="20" width="130" height="64" rx="10" fill="#1f2937" stroke="#374151" stroke-width="1.5"/>
+      <text x="85" y="46" text-anchor="middle" fill="white" font-size="11" font-weight="700">GitHub</text>
+      <text x="85" y="62" text-anchor="middle" fill="#9ca3af" font-size="9">Issues / Comments</text>
+      <text x="85" y="75" text-anchor="middle" fill="#6b7280" font-size="8">Real API (Octokit)</text>
+
+      <!-- Trello -->
+      <rect x="170" y="20" width="130" height="64" rx="10" fill="#1f2937" stroke="#374151" stroke-width="1.5"/>
+      <text x="235" y="46" text-anchor="middle" fill="white" font-size="11" font-weight="700">Trello</text>
+      <text x="235" y="62" text-anchor="middle" fill="#9ca3af" font-size="9">Cards / Webhooks</text>
+      <text x="235" y="75" text-anchor="middle" fill="#6b7280" font-size="8">Mock adapter</text>
+
+      <!-- Asana -->
+      <rect x="320" y="20" width="130" height="64" rx="10" fill="#1f2937" stroke="#374151" stroke-width="1.5"/>
+      <text x="385" y="46" text-anchor="middle" fill="white" font-size="11" font-weight="700">Asana</text>
+      <text x="385" y="62" text-anchor="middle" fill="#9ca3af" font-size="9">Tasks / Webhooks</text>
+      <text x="385" y="75" text-anchor="middle" fill="#6b7280" font-size="8">Mock adapter</text>
+
+      <!-- Dashboard -->
+      <rect x="590" y="20" width="130" height="64" rx="10" fill="#312e81" stroke="#4338ca" stroke-width="1.5"/>
+      <text x="655" y="46" text-anchor="middle" fill="white" font-size="11" font-weight="700">Dashboard</text>
+      <text x="655" y="62" text-anchor="middle" fill="#a5b4fc" font-size="9">GET /api/logs</text>
+      <text x="655" y="75" text-anchor="middle" fill="#818cf8" font-size="8">GET /api/status</text>
+
+      <!-- ── Arrows: Sources → Server ── -->
+      <line x1="85" y1="84" x2="85" y2="158" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="235" y1="84" x2="200" y2="158" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="385" y1="84" x2="325" y2="158" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <!-- webhook labels -->
+      <text x="60" y="125" fill="#6366f1" font-size="8">POST /webhook/github</text>
+      <text x="175" y="120" fill="#6366f1" font-size="8">/webhook/trello</text>
+      <text x="330" y="120" fill="#6366f1" font-size="8">/webhook/asana</text>
+
+      <!-- Dashboard arrow to event store (later) -->
+      <line x1="655" y1="84" x2="655" y2="158" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-gray)"/>
+
+      <!-- ── ROW 2: Express Server ── -->
+      <rect x="20" y="158" width="440" height="72" rx="10" fill="#4f46e5" stroke="#4338ca" stroke-width="2"/>
+      <text x="240" y="182" text-anchor="middle" fill="white" font-size="12" font-weight="700">Express Server  (server.ts)</text>
+      <text x="240" y="200" text-anchor="middle" fill="#c7d2fe" font-size="9">HMAC verification · Deduplication · Cooldown · Loop prevention · Payload validation</text>
+      <text x="240" y="217" text-anchor="middle" fill="#a5b4fc" font-size="8.5">Responds 202 immediately · processes async via handleTaskEvent()</text>
+
+      <!-- Event Store box -->
+      <rect x="490" y="158" width="230" height="72" rx="10" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1.5"/>
+      <text x="605" y="182" text-anchor="middle" fill="#111827" font-size="11" font-weight="700">Event Store  (event-store.ts)</text>
+      <text x="605" y="200" text-anchor="middle" fill="#6b7280" font-size="9">In-memory log ring buffer (200)</text>
+      <text x="605" y="215" text-anchor="middle" fill="#6b7280" font-size="9">Agent run traces · status per agent</text>
+
+      <!-- Server → Event Store -->
+      <line x1="460" y1="194" x2="490" y2="194" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow-gray)"/>
+      <text x="465" y="187" fill="#9ca3af" font-size="8">logEvent()</text>
+
+      <!-- ── Arrow: Server → Workflow ── -->
+      <line x1="240" y1="230" x2="240" y2="290" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="245" y="265" fill="#6366f1" font-size="8">createReviewTaskWorkflow(config, adapter)</text>
+
+      <!-- ── ROW 3: Workflow ── -->
+      <rect x="20" y="290" width="440" height="72" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+      <text x="240" y="312" text-anchor="middle" fill="#14532d" font-size="12" font-weight="700">Review-Task Workflow  (review-task.ts)</text>
+
+      <!-- Step 1 -->
+      <rect x="40" y="322" width="175" height="30" rx="6" fill="white" stroke="#86efac" stroke-width="1"/>
+      <text x="127" y="338" text-anchor="middle" fill="#166534" font-size="9" font-weight="600">Step 1: checkDescription</text>
+      <text x="127" y="349" text-anchor="middle" fill="#15803d" font-size="8">minLength + requiredFields</text>
+
+      <!-- Step 2 -->
+      <rect x="230" y="322" width="210" height="30" rx="6" fill="white" stroke="#86efac" stroke-width="1"/>
+      <text x="335" y="338" text-anchor="middle" fill="#166534" font-size="9" font-weight="600">Step 2: analyzeOrRemind</text>
+      <text x="335" y="349" text-anchor="middle" fill="#15803d" font-size="8">run agent OR post reminder comment</text>
+
+      <!-- arrow between steps -->
+      <line x1="215" y1="337" x2="230" y2="337" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+      <!-- ── Arrow: Workflow → Agent ── -->
+      <line x1="240" y1="362" x2="240" y2="422" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- ── ROW 4: Agent ── -->
+      <rect x="20" y="422" width="290" height="72" rx="10" fill="#fefce8" stroke="#d97706" stroke-width="2"/>
+      <text x="165" y="444" text-anchor="middle" fill="#78350f" font-size="12" font-weight="700">TaskAnalyzer Agent  (task-analyzer.ts)</text>
+      <text x="165" y="461" text-anchor="middle" fill="#92400e" font-size="9">Mastra Agent wrapping Claude Sonnet 4.5</text>
+      <text x="165" y="477" text-anchor="middle" fill="#92400e" font-size="9">System prompt: eval rules · templates · security</text>
+
+      <!-- ── Tools ── -->
+      <rect x="330" y="422" width="130" height="34" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1.5"/>
+      <text x="395" y="435" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">Tool: get_task</text>
+      <text x="395" y="449" text-anchor="middle" fill="#6b7280" font-size="8">reads task from adapter</text>
+
+      <rect x="330" y="462" width="130" height="34" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1.5"/>
+      <text x="395" y="475" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">Tool: add_comment</text>
+      <text x="395" y="489" text-anchor="middle" fill="#6b7280" font-size="8">posts response to task</text>
+
+      <rect x="470" y="442" width="130" height="34" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1.5"/>
+      <text x="535" y="455" text-anchor="middle" fill="#374151" font-size="9" font-weight="600">Tool: set_status</text>
+      <text x="535" y="469" text-anchor="middle" fill="#6b7280" font-size="8">labels: ready / needs-clarification</text>
+
+      <!-- Agent → Tools arrows -->
+      <line x1="310" y1="450" x2="330" y2="439" stroke="#d97706" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="310" y1="465" x2="330" y2="479" stroke="#d97706" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="460" y1="458" x2="470" y2="459" stroke="#d97706" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- ── Arrow: Agent → Claude AI ── -->
+      <line x1="165" y1="494" x2="165" y2="554" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="170" y="527" fill="#6366f1" font-size="8">Anthropic API</text>
+
+      <!-- ── ROW 5: Claude AI ── -->
+      <rect x="20" y="554" width="290" height="54" rx="10" fill="#1e1b4b" stroke="#4338ca" stroke-width="2"/>
+      <text x="165" y="576" text-anchor="middle" fill="white" font-size="12" font-weight="700">Claude AI  (claude-sonnet-4-5)</text>
+      <text x="165" y="595" text-anchor="middle" fill="#a5b4fc" font-size="9">@ai-sdk/anthropic · agentic tool-use loop</text>
+
+      <!-- ── ProjectConfig box ── -->
+      <rect x="490" y="290" width="230" height="72" rx="10" fill="#faf5ff" stroke="#a855f7" stroke-width="1.5"/>
+      <text x="605" y="312" text-anchor="middle" fill="#581c87" font-size="11" font-weight="700">ProjectConfig  (project.ts)</text>
+      <text x="605" y="329" text-anchor="middle" fill="#7e22ce" font-size="9">name · techStack · conventions</text>
+      <text x="605" y="345" text-anchor="middle" fill="#7e22ce" font-size="9">reviewCriteria · knowledge (Phase 2)</text>
+      <text x="605" y="360" text-anchor="middle" fill="#9333ea" font-size="8">GitHub: fetched from .github/task-ai.md</text>
+
+      <!-- Server → Config arrow -->
+      <line x1="460" y1="208" x2="605" y2="290" stroke="#a855f7" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
+
+      <!-- Legend -->
+      <rect x="490" y="422" width="230" height="120" rx="10" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+      <text x="605" y="443" text-anchor="middle" fill="#374151" font-size="10" font-weight="700">Legend</text>
+      <line x1="508" y1="458" x2="540" y2="458" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="548" y="462" fill="#374151" font-size="9">Primary data flow</text>
+      <line x1="508" y1="476" x2="540" y2="476" stroke="#9ca3af" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow-gray)"/>
+      <text x="548" y="480" fill="#374151" font-size="9">Side-effect / event</text>
+      <line x1="508" y1="494" x2="540" y2="494" stroke="#a855f7" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
+      <text x="548" y="498" fill="#374151" font-size="9">Config injection</text>
+      <line x1="508" y1="512" x2="540" y2="512" stroke="#d97706" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="548" y="516" fill="#374151" font-size="9">Tool invocation</text>
+      <line x1="508" y1="530" x2="540" y2="530" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+      <text x="548" y="534" fill="#374151" font-size="9">Workflow step</text>
+    </svg>
+  </div>
+
+  <!-- ── SECTION 3: COMPONENT REFERENCE ── -->
+  <div id="components" class="page-break section-header">
+    <div class="section-number">3</div>
+    <h2>Component Reference</h2>
+  </div>
+
+  <h3>Project File Structure</h3>
+  <div class="file-tree">
+src/<br>
+├── <span class="dir">mastra/</span><br>
+│   ├── <span class="dir">agents/</span><br>
+│   │   └── task-analyzer.ts    <span class="comment">← createTaskAnalyzerAgent(config, adapter) factory</span><br>
+│   ├── <span class="dir">tools/</span><br>
+│   │   ├── index.ts            <span class="comment">← createTools(adapter) — 3 tools</span><br>
+│   │   └── rag.ts              <span class="comment">← Phase 2 stubs (searchDocs, searchCode)</span><br>
+│   └── <span class="dir">workflows/</span><br>
+│       └── review-task.ts      <span class="comment">← createReviewTaskWorkflow(config, adapter)</span><br>
+├── <span class="dir">adapters/</span><br>
+│   ├── interface.ts            <span class="comment">← ProjectManagerAdapter, Task, TriggerContext</span><br>
+│   ├── github.ts               <span class="comment">← GitHubAdapter (real Octokit API)</span><br>
+│   ├── trello.ts               <span class="comment">← TrelloAdapter (mock)</span><br>
+│   └── asana.ts                <span class="comment">← AsanaAdapter (mock)</span><br>
+├── <span class="dir">config/</span><br>
+│   └── project.ts              <span class="comment">← ProjectConfig interface + defaultProjectConfig</span><br>
+├── <span class="dir">store/</span><br>
+│   └── event-store.ts          <span class="comment">← In-memory log + agent run trace store</span><br>
+├── server.ts                   <span class="comment">← Express server + all webhook handlers</span><br>
+└── index.ts                    <span class="comment">← Entry point, env validation, port check</span>
+  </div>
+
+  <h3>API Endpoints</h3>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Description</th><th>Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>POST</code></td><td><code>/webhook/github</code></td><td>GitHub Issues / Comments webhook receiver. Validates HMAC, deduplicates, enforces cooldown.</td><td><span class="tag tag-green">HMAC signed</span></td></tr>
+      <tr><td><code>POST</code></td><td><code>/webhook/trello</code></td><td>Trello card event receiver (mock adapter).</td><td><span class="tag tag-red">Unverified</span></td></tr>
+      <tr><td><code>POST</code></td><td><code>/webhook/asana</code></td><td>Asana task event receiver (mock adapter).</td><td><span class="tag tag-red">Unverified</span></td></tr>
+      <tr><td><code>GET</code></td><td><code>/health</code></td><td>Returns <code>{ status: "ok", adapters: [...] }</code>. Shows which adapters are active.</td><td><span class="tag tag-gray">Public</span></td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/status</code></td><td>Returns in-memory agent status map (last task, last run, recent traces).</td><td><span class="tag tag-yellow">No auth</span></td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/logs</code></td><td>Returns last 100 log events from in-memory ring buffer.</td><td><span class="tag tag-yellow">No auth</span></td></tr>
+      <tr><td><code>GET</code></td><td><code>/</code></td><td>Serves static dashboard from <code>public/index.html</code>.</td><td><span class="tag tag-gray">Public</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Adapter Interface</h3>
+  <p>All PM integrations implement a single <code>ProjectManagerAdapter</code> contract, enabling the workflow and agent to be fully platform-agnostic:</p>
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>getTask</code></td><td><code>(taskId) → Promise&lt;Task&gt;</code></td><td>Fetch task details by ID</td></tr>
+      <tr><td><code>addComment</code></td><td><code>(taskId, text) → Promise&lt;void&gt;</code></td><td>Post analysis result as a comment</td></tr>
+      <tr><td><code>setStatus</code></td><td><code>(taskId, status) → Promise&lt;void&gt;</code></td><td>Update task status / labels</td></tr>
+    </tbody>
+  </table>
+  <p>The <code>GitHubAdapter</code> also adds <code>getComments()</code> and <code>fetchRepoConfig()</code> — GitHub-specific extensions used for conversation mode and per-repo configuration.</p>
+
+  <h3>Agent Tools</h3>
+  <p>The Mastra agent is given exactly three tools, each delegating directly to the active adapter:</p>
+  <table>
+    <thead>
+      <tr><th>Tool ID</th><th>Purpose</th><th>Input</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>get_task</code></td><td>Retrieve full task data before analysis</td><td><code>taskId: string</code></td></tr>
+      <tr><td><code>add_comment</code></td><td>Post the plan or questions back to the task</td><td><code>taskId, comment: string</code></td></tr>
+      <tr><td><code>set_status</code></td><td>Label the task as <code>ready_for_dev</code> or <code>needs_clarification</code></td><td><code>taskId, status: enum</code></td></tr>
+    </tbody>
+  </table>
+
+  <!-- ── SECTION 4: REQUEST FLOW ── -->
+  <div id="flow" class="page-break section-header">
+    <div class="section-number">4</div>
+    <h2>Request Flow</h2>
+  </div>
+
+  <h3>GitHub Issues — Label Trigger</h3>
+  <p>This is the primary, fully-implemented flow:</p>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Step</th><th>Actor</th><th>Details</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>Label applied</td><td>GitHub</td><td>User adds the <code>ai-review</code> label to an issue</td></tr>
+      <tr><td>2</td><td>Webhook fired</td><td>GitHub → Server</td><td><code>POST /webhook/github</code> with <code>x-hub-signature-256</code> header</td></tr>
+      <tr><td>3</td><td>HMAC verify</td><td>Server</td><td>Signature checked with <code>crypto.timingSafeEqual</code></td></tr>
+      <tr><td>4</td><td>Dedup check</td><td>Server</td><td><code>x-github-delivery</code> ID checked against seen-set (10-min TTL)</td></tr>
+      <tr><td>5</td><td>Cooldown check</td><td>Server</td><td>Same issue not re-processed within 60 seconds</td></tr>
+      <tr><td>6</td><td>202 response</td><td>Server → GitHub</td><td>Immediately returns accepted; processing continues async</td></tr>
+      <tr><td>7</td><td>Fetch config</td><td>GitHubAdapter</td><td>Reads <code>.github/task-ai.md</code> from the repo (fallback: default config)</td></tr>
+      <tr><td>8</td><td>checkDescription</td><td>Workflow Step 1</td><td>Validates <code>minDescriptionLength</code> and <code>requiredFields</code></td></tr>
+      <tr><td>9a</td><td>Fail → reminder</td><td>Workflow Step 2</td><td>Posts reminder comment, sets <code>needs-clarification</code> label</td></tr>
+      <tr><td>9b</td><td>Pass → agent</td><td>Workflow Step 2</td><td>Runs <code>TaskAnalyzer</code> agent with structured prompt</td></tr>
+      <tr><td>10</td><td>Agent loop</td><td>Claude AI</td><td>Calls <code>get_task</code> → evaluates → calls <code>add_comment</code> + <code>set_status</code></td></tr>
+      <tr><td>11</td><td>Result posted</td><td>GitHubAdapter</td><td>Development Plan or Clarifying Questions appear on the issue</td></tr>
+    </tbody>
+  </table>
+
+  <h3>GitHub Issues — Comment Trigger (Conversation Mode)</h3>
+  <p>When a user replies to the agent's questions by mentioning <code>@task-ai</code> in a comment:</p>
+  <div class="callout info">
+    <strong>Conversation Mode</strong>
+    The agent loads the full comment thread (up to 50 comments) via <code>getComments()</code> and builds a structured prompt containing the task description, the full thread (oldest-first), and the triggering comment. The agent then re-evaluates with all context combined — previous answers count as part of the task spec.
+  </div>
+
+  <h3>Per-Repo Configuration</h3>
+  <p>For GitHub, each repository can customize agent behavior by creating a <code>.github/task-ai.md</code> file with YAML frontmatter:</p>
+  <pre>
+<span class="comment">---</span>
+<span class="keyword">name</span>: <span class="string">"My SaaS App"</span>
+<span class="keyword">techStack</span>:
+  - <span class="string">"Next.js 14"</span>
+  - <span class="string">"PostgreSQL"</span>
+<span class="keyword">conventions</span>:
+  - <span class="string">"Feature-based folder structure"</span>
+<span class="keyword">reviewCriteria</span>:
+  <span class="keyword">minDescriptionLength</span>: <span class="type">100</span>
+  <span class="keyword">requiredFields</span>: [<span class="string">"title"</span>, <span class="string">"description"</span>, <span class="string">"assignee"</span>]
+<span class="comment">---</span></pre>
+  <p>If the file is absent, the agent falls back to <code>defaultProjectConfig</code> (Next.js + TypeScript + PostgreSQL stack).</p>
+
+  <!-- ── SECTION 5: CHALLENGES ── -->
+  <div id="challenges" class="page-break section-header">
+    <div class="section-number">5</div>
+    <h2>Challenges &amp; Resolutions</h2>
+  </div>
+
+  <div class="challenge">
+    <div class="challenge-header">
+      <div class="challenge-num">1</div>
+      <strong>Raw Body Capture for HMAC Verification</strong>
+    </div>
+    <div class="challenge-body">
+      <div class="challenge-label">Challenge</div>
+      <p>GitHub's webhook signature is computed over the raw request body bytes. Express's <code>express.json()</code> middleware parses JSON and discards the raw body by default — making it impossible to verify the HMAC after parsing.</p>
+      <div class="challenge-label resolution">Resolution</div>
+      <p class="resolution">Used Express's built-in <code>verify</code> callback in <code>express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })</code> to capture the raw buffer before it's consumed. The HMAC verification function reads <code>req.rawBody</code> directly.</p>
+    </div>
+  </div>
+
+  <div class="challenge">
+    <div class="challenge-header">
+      <div class="challenge-num">2</div>
+      <strong>Infinite Loop via Bot Self-Comments</strong>
+    </div>
+    <div class="challenge-body">
+      <div class="challenge-label">Challenge</div>
+      <p>The agent posts comments on GitHub issues. Those new comments fire <code>issue_comment</code> webhook events back to the server. Without protection, the agent would endlessly reply to its own comments, causing an infinite loop and exhausting API quotas.</p>
+      <div class="challenge-label resolution">Resolution</div>
+      <p class="resolution">Added a self-comment filter: if <code>GITHUB_BOT_USERNAME</code> is set and the comment sender matches, the webhook is silently ignored (<code>status: "ignored"</code>). The startup validation also warns operators if <code>GITHUB_BOT_USERNAME</code> is missing.</p>
+    </div>
+  </div>
+
+  <div class="challenge">
+    <div class="challenge-header">
+      <div class="challenge-num">3</div>
+      <strong>GitHub Webhook Delivery Retries</strong>
+    </div>
+    <div class="challenge-body">
+      <div class="challenge-label">Challenge</div>
+      <p>GitHub automatically retries webhook deliveries if the server doesn't respond within ~10 seconds (or responds with 5xx). This could cause the same issue to be analyzed multiple times, posting duplicate plans and burning LLM credits.</p>
+      <div class="challenge-label resolution">Resolution</div>
+      <p class="resolution">Implemented delivery ID deduplication using a <code>Map&lt;deliveryId, timestamp&gt;</code> with a 10-minute TTL. Each delivery's <code>x-github-delivery</code> header is checked before processing; duplicates return <code>200 { status: "duplicate" }</code> immediately. Expired entries are purged lazily on each webhook call.</p>
+    </div>
+  </div>
+
+  <div class="challenge">
+    <div class="challenge-header">
+      <div class="challenge-num">4</div>
+      <strong>Rapid Re-triggering via Labels</strong>
+    </div>
+    <div class="challenge-body">
+      <div class="challenge-label">Challenge</div>
+      <p>A user could remove and re-add the <code>ai-review</code> label in quick succession (or mention the agent multiple times), causing multiple concurrent analyses of the same issue.</p>
+      <div class="challenge-label resolution">Resolution</div>
+      <p class="resolution">Added a per-issue cooldown using <code>issueCooldowns.get(taskId)</code>: the same issue is not re-processed within 60 seconds of the last accepted trigger. Returns <code>200 { status: "too_soon" }</code> to reject rapid duplicates while avoiding error codes that would trigger retries.</p>
+    </div>
+  </div>
+
+  <div class="challenge">
+    <div class="challenge-header">
+      <div class="challenge-num">5</div>
+      <strong>Mastra Workflow API Incompatibility</strong>
+    </div>
+    <div class="challenge-body">
+      <div class="challenge-label">Challenge</div>
+      <p>The Mastra framework provides a typed <code>Workflow</code> builder class for defining multi-step workflows. However, passing adapter and config as closure state between two steps in the builder API required complex generics that created more noise than value for a two-step flow.</p>
+      <div class="challenge-label resolution">Resolution</div>
+      <p class="resolution">Implemented the workflow as a plain factory function returning an object with a <code>.run()</code> method. This retains the semantic two-step structure (checkDescription → analyzeOrRemind) with clean closure access to <code>adapter</code> and <code>config</code>, without fighting the framework's type system. A TODO notes migration to the Mastra builder when context-passing improves.</p>
+    </div>
+  </div>
+
+  <div class="challenge">
+    <div class="challenge-header">
+      <div class="challenge-num">6</div>
+      <strong>Port Conflict on Dual IPv4/IPv6 Stack</strong>
+    </div>
+    <div class="challenge-body">
+      <div class="challenge-label">Challenge</div>
+      <p>On modern macOS/Linux systems, <code>localhost</code> resolves to <code>::1</code> (IPv6). Express can bind on IPv4 while another process owns the IPv6 socket — the two wouldn't conflict at the socket level, but browsers would hit the wrong process.</p>
+      <div class="challenge-label resolution">Resolution</div>
+      <p class="resolution">Added an active pre-flight port check using <code>net.createConnection({ port, host: "localhost" })</code> before starting the server. If a connection succeeds, the process logs a clear error and exits with code 1 rather than silently starting behind another process.</p>
+    </div>
+  </div>
+
+  <div class="challenge">
+    <div class="challenge-header">
+      <div class="challenge-num">7</div>
+      <strong>Malformed Payload Crashes</strong>
+    </div>
+    <div class="challenge-body">
+      <div class="challenge-label">Challenge</div>
+      <p>Early GitHub webhook handling assumed <code>payload.issue.number</code> and <code>payload.repository.owner.login</code> would always be present. A missing field caused an uncaught TypeError that crashed the async handler, leaving no response to GitHub and triggering retries.</p>
+      <div class="challenge-label resolution">Resolution</div>
+      <p class="resolution">Added explicit null-guards before constructing the <code>taskId</code>: <code>if (!payload?.issue?.number || !payload?.repository?.owner?.login || !payload?.repository?.name)</code>. Invalid payloads now return <code>400 { error: "Malformed payload" }</code> cleanly. Inner error handling also wraps the async processing path with a fallback comment on the issue.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 6: SECURITY ── -->
+  <div id="security" class="page-break section-header">
+    <div class="section-number">6</div>
+    <h2>Security: Fixed &amp; Remaining</h2>
+  </div>
+
+  <h3>Fixed / Implemented</h3>
+  <div class="security-grid">
+    <div class="security-item security-fixed">
+      <div class="icon">🔐</div>
+      <strong>GitHub HMAC Signature Verification</strong>
+      <p>All incoming GitHub webhooks are verified using <code>sha256</code> HMAC with <code>crypto.timingSafeEqual()</code> — preventing timing attacks. Requests without a valid signature return 401.</p>
+    </div>
+    <div class="security-item security-fixed">
+      <div class="icon">🔄</div>
+      <strong>Delivery Deduplication</strong>
+      <p>Replay protection via delivery ID tracking (10-min TTL). Prevents the same webhook from being processed twice even if GitHub retries.</p>
+    </div>
+    <div class="security-item security-fixed">
+      <div class="icon">⏱️</div>
+      <strong>Per-Issue Rate Cooldown</strong>
+      <p>60-second cooldown per task ID prevents resource exhaustion from rapid label toggle or @mention spam on the same issue.</p>
+    </div>
+    <div class="security-item security-fixed">
+      <div class="icon">🔁</div>
+      <strong>Infinite Loop Prevention</strong>
+      <p>Self-comment filter using <code>GITHUB_BOT_USERNAME</code> prevents the agent from responding to its own messages and entering an infinite processing loop.</p>
+    </div>
+    <div class="security-item security-fixed">
+      <div class="icon">🛡️</div>
+      <strong>Prompt Injection Defense</strong>
+      <p>The agent's system prompt contains explicit "hard rules" that override all user input: attempts to extract instructions, change persona, or inject off-topic commands receive a fixed canned response with no elaboration.</p>
+    </div>
+    <div class="security-item security-fixed">
+      <div class="icon">✅</div>
+      <strong>Startup Secret Enforcement</strong>
+      <p>If <code>GITHUB_TOKEN</code> is configured but <code>GITHUB_WEBHOOK_SECRET</code> is absent, the server refuses to start. This prevents accidentally running without signature verification.</p>
+    </div>
+    <div class="security-item security-fixed">
+      <div class="icon">🧪</div>
+      <strong>Payload Null-Guards</strong>
+      <p>All required fields in webhook payloads are validated before use. Missing fields return structured 400 errors rather than crashing the process.</p>
+    </div>
+    <div class="security-item security-fixed">
+      <div class="icon">⏳</div>
+      <strong>Agent Timeout</strong>
+      <p>The <code>agent.generate()</code> call is wrapped in a 120-second timeout via <code>withTimeout()</code>. Stalled LLM calls are killed cleanly rather than holding open connections indefinitely.</p>
+    </div>
+  </div>
+
+  <h3>Remaining / Open Issues</h3>
+  <div class="security-grid">
+    <div class="security-item security-remaining">
+      <div class="icon">⚠️</div>
+      <strong>No Webhook Verification for Trello &amp; Asana</strong>
+      <p>Both <code>/webhook/trello</code> and <code>/webhook/asana</code> accept any POST without signature verification. Any actor with the URL can trigger analysis. Marked as TODO in code.</p>
+    </div>
+    <div class="security-item security-remaining">
+      <div class="icon">⚠️</div>
+      <strong>Unauthenticated Internal APIs</strong>
+      <p><code>GET /api/status</code> and <code>GET /api/logs</code> expose agent run traces, task IDs, and LLM step details to anyone with network access. Should be protected before public deployment.</p>
+    </div>
+    <div class="security-item security-remaining">
+      <div class="icon">⚠️</div>
+      <strong>No Global Rate Limiting Middleware</strong>
+      <p>There is no Express rate-limiting middleware (e.g., <code>express-rate-limit</code>). All endpoints are susceptible to flood attacks from any source that can reach the server.</p>
+    </div>
+    <div class="security-item security-remaining">
+      <div class="icon">⚠️</div>
+      <strong>In-Memory State Not Persistent</strong>
+      <p>The deduplication map, cooldown map, event log, and agent run traces are all in-memory. A server restart loses all deduplication state, potentially allowing duplicate processing of recent events.</p>
+    </div>
+    <div class="security-item security-remaining">
+      <div class="icon">⚠️</div>
+      <strong>Thread Truncation Risk</strong>
+      <p>GitHub comment threads are fetched with a hard cap of 50 comments (<code>per_page: MAX_THREAD_COMMENTS</code>). For long-running issues, the agent may miss early context. Acknowledged in a code TODO.</p>
+    </div>
+    <div class="security-item security-remaining">
+      <div class="icon">⚠️</div>
+      <strong>No Content Security Policy / Helmet</strong>
+      <p>The Express server does not use <code>helmet.js</code> or set any security headers (CSP, HSTS, X-Frame-Options). Required before any browser-facing deployment.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 7: FUTURE IMPROVEMENTS ── -->
+  <div id="improvements" class="page-break section-header">
+    <div class="section-number">7</div>
+    <h2>Future Improvements</h2>
+  </div>
+
+  <h3>Phase 2 — Planned</h3>
+
+  <div class="improvement">
+    <div class="improvement-icon">🔗</div>
+    <div class="improvement-content">
+      <strong>Real Trello &amp; Asana API Integration</strong>
+      <p>Replace mock adapters with real REST API calls using <code>TRELLO_API_KEY</code>/<code>TRELLO_TOKEN</code> and <code>ASANA_TOKEN</code>. Adapter interface is already defined — only the implementation needs to be added.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">🧠</div>
+    <div class="improvement-content">
+      <strong>RAG / Knowledge Base Integration</strong>
+      <p>The <code>rag.ts</code> file already defines stubs for <code>searchDocsTool</code> and <code>searchCodeTool</code>. When <code>knowledge.enabled = true</code> in the project config, the agent should consult the codebase and documentation before writing a plan, producing far more accurate technical approaches.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">🔐</div>
+    <div class="improvement-content">
+      <strong>Webhook Signature Verification for Trello &amp; Asana</strong>
+      <p>Implement HMAC or OAuth verification for Trello and Asana webhooks to match the security level of the GitHub integration.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">💾</div>
+    <div class="improvement-content">
+      <strong>Persistent Storage</strong>
+      <p>Replace in-memory event store, deduplication map, and cooldown map with a database (e.g., Redis for fast key-value, SQLite for structured traces). This enables cross-restart deduplication and historical audit trails.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">🔁</div>
+    <div class="improvement-content">
+      <strong>Retry Logic for Failed Agent Runs</strong>
+      <p>Add exponential backoff retries for transient failures (network errors, Claude API rate limits). Consider integrating a job queue like BullMQ for durable, distributed processing.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">⚙️</div>
+    <div class="improvement-content">
+      <strong>Per-Project Config for All Adapters</strong>
+      <p>Currently only GitHub reads per-repo configuration from <code>.github/task-ai.md</code>. Trello and Asana always use <code>defaultProjectConfig</code>. Adding a config-lookup mechanism for each platform would allow project-specific tech stacks and conventions.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">🚀</div>
+    <div class="improvement-content">
+      <strong>Mastra Workflow Builder Migration</strong>
+      <p>The workflow is currently a plain object due to complexity with Mastra's typed step API. Once Mastra improves context-passing between steps, migrating to the official <code>Workflow</code> + <code>createStep</code> pattern enables built-in step tracing, retries, and conditional branching.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">🛡️</div>
+    <div class="improvement-content">
+      <strong>Rate Limiting &amp; Security Headers</strong>
+      <p>Add <code>express-rate-limit</code> middleware for global flood protection and <code>helmet</code> for security headers (CSP, HSTS, X-Frame-Options). Protect <code>/api/status</code> and <code>/api/logs</code> with at minimum a shared secret or IP allowlist.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">📜</div>
+    <div class="improvement-content">
+      <strong>Smart Thread Windowing</strong>
+      <p>The current 50-comment hard cap can miss early context on long issues. Implement a smart window that always includes the original issue description, the agent's first response, and the most recent N comments — ensuring the most relevant context is always present.</p>
+    </div>
+  </div>
+
+  <div class="improvement">
+    <div class="improvement-icon">⏰</div>
+    <div class="improvement-content">
+      <strong>Pre-Analysis Delay</strong>
+      <p>A TODO in the workflow notes that a delay before <code>checkDescription</code> would give issue authors time to finish writing. Implement via Mastra's built-in step delays or a job queue (BullMQ), so the agent waits 5–10 minutes after the trigger before analyzing — reducing false "description too short" failures.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 8: ENVIRONMENT VARIABLES ── -->
+  <div id="env" class="page-break section-header">
+    <div class="section-number">8</div>
+    <h2>Environment Variables</h2>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Required</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>ANTHROPIC_API_KEY</code></td>
+        <td><span class="tag tag-red">Required</span></td>
+        <td>Anthropic API key for Claude AI. Server refuses to start if absent.</td>
+      </tr>
+      <tr>
+        <td><code>GITHUB_TOKEN</code></td>
+        <td><span class="tag tag-yellow">Conditional</span></td>
+        <td>GitHub personal access token (PAT) with <code>issues:write</code> scope. Required to enable GitHub integration. If absent, <code>/webhook/github</code> returns 503.</td>
+      </tr>
+      <tr>
+        <td><code>GITHUB_WEBHOOK_SECRET</code></td>
+        <td><span class="tag tag-red">Required if GITHUB_TOKEN set</span></td>
+        <td>Shared secret used to verify GitHub webhook HMAC signatures. Server refuses to start if <code>GITHUB_TOKEN</code> is set but this is absent.</td>
+      </tr>
+      <tr>
+        <td><code>GITHUB_BOT_USERNAME</code></td>
+        <td><span class="tag tag-yellow">Strongly recommended</span></td>
+        <td>GitHub username of the bot account. Used to prevent the agent from replying to its own comments. Without this, infinite loops are possible.</td>
+      </tr>
+      <tr>
+        <td><code>GITHUB_TRIGGER_LABEL</code></td>
+        <td><span class="tag tag-gray">Optional</span></td>
+        <td>Label name that triggers analysis on new issues. Defaults to <code>ai-review</code>.</td>
+      </tr>
+      <tr>
+        <td><code>GITHUB_MENTION</code></td>
+        <td><span class="tag tag-gray">Optional</span></td>
+        <td>Mention string that triggers analysis in comments. Defaults to <code>@task-ai</code>.</td>
+      </tr>
+      <tr>
+        <td><code>PORT</code></td>
+        <td><span class="tag tag-gray">Optional</span></td>
+        <td>HTTP port. Defaults to <code>3000</code>.</td>
+      </tr>
+      <tr>
+        <td><code>TRELLO_API_KEY</code></td>
+        <td><span class="tag tag-gray">Phase 2</span></td>
+        <td>Trello API key. Not yet used (mock adapter).</td>
+      </tr>
+      <tr>
+        <td><code>TRELLO_TOKEN</code></td>
+        <td><span class="tag tag-gray">Phase 2</span></td>
+        <td>Trello OAuth token. Not yet used (mock adapter).</td>
+      </tr>
+      <tr>
+        <td><code>ASANA_TOKEN</code></td>
+        <td><span class="tag tag-gray">Phase 2</span></td>
+        <td>Asana personal access token. Not yet used (mock adapter).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout success" style="margin-top: 40px;">
+    <strong>Summary</strong>
+    The Task Analyzer Agent is a well-structured, security-conscious Phase 1 implementation. The adapter pattern provides clean extensibility, the GitHub integration is production-ready, and the security groundwork for the most critical path (GitHub) is solid. The main areas for improvement before broader deployment are: securing the Trello/Asana webhooks, adding persistence, protecting internal APIs, and connecting RAG for richer analysis.
+  </div>
+
+  <p style="text-align: center; color: #9ca3af; font-size: 9pt; margin-top: 48px;">
+    Generated March 2026 · Task Analyzer Agent v1.0 · Powered by Claude Sonnet 4.6
+  </p>
+
+</div>
+</body>
+</html>
