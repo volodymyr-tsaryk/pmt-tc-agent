@@ -9,6 +9,13 @@ if (!process.env.ANTHROPIC_API_KEY) {
   process.exit(1);
 }
 
+if (!process.env.GITHUB_TOKEN) {
+  console.warn(
+    "[Agent] WARNING: GITHUB_TOKEN is not set. GitHub Issues integration will be disabled.\n" +
+    "Set GITHUB_TOKEN in .env to enable it."
+  );
+}
+
 import net from "net";
 import { createServer } from "./server";
 
@@ -40,6 +47,9 @@ function isPortInUse(port: number): Promise<boolean> {
     console.log(`[Agent] Webhooks:`);
     console.log(`  POST http://localhost:${PORT}/webhook/trello`);
     console.log(`  POST http://localhost:${PORT}/webhook/asana`);
+    if (process.env.GITHUB_TOKEN) {
+      console.log(`  POST http://localhost:${PORT}/webhook/github`);
+    }
   });
 
   server.on("error", (err: NodeJS.ErrnoException) => {
