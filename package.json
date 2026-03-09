@@ -11,7 +11,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test:trello": "curl -X POST http://localhost:3000/webhook/trello -H 'Content-Type: application/json' -d '{\"taskId\": \"TRELLO-001\"}'",
-    "test:asana": "curl -X POST http://localhost:3000/webhook/asana -H 'Content-Type: application/json' -d '{\"taskId\": \"ASANA-001\"}'"
+    "test:asana": "curl -X POST http://localhost:3000/webhook/asana -H 'Content-Type: application/json' -d '{\"taskId\": \"ASANA-001\"}'",
+    "test:github:label": "TEST_OWNER=octocat TEST_REPO=Hello-World TEST_ISSUE=1 npx ts-node scripts/test-github-label.ts",
+    "test:github:comment": "TEST_OWNER=octocat TEST_REPO=Hello-World TEST_ISSUE=1 npx ts-node scripts/test-github-comment.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.17",
