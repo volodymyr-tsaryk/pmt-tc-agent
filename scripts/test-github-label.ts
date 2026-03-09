@@ -4,8 +4,9 @@
  * Usage:
  *   TEST_OWNER=my-org TEST_REPO=my-repo TEST_ISSUE=42 npx ts-node scripts/test-github-label.ts
  *
- * Requires: server running on PORT (default 3000), GITHUB_TOKEN set in .env
+ * Requires: server running on PORT (default 3000), GITHUB_TOKEN and GITHUB_WEBHOOK_SECRET set in .env
  */
+import crypto from "crypto";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -36,13 +37,19 @@ const payload = {
   sender: { login: "test-user" },
 };
 
+const body = JSON.stringify(payload);
+const secret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
+const signature = "sha256=" + crypto.createHmac("sha256", secret).update(body).digest("hex");
+
 fetch(`http://localhost:${PORT}/webhook/github`, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
     "X-GitHub-Event": "issues",
+    "X-GitHub-Delivery": crypto.randomUUID(),
+    "X-Hub-Signature-256": signature,
   },
-  body: JSON.stringify(payload),
+  body,
 })
   .then((r) => r.json())
   .then((data) => console.log("[test:github:label] Response:", data))

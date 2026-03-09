@@ -18,3 +18,18 @@ export interface ProjectManagerAdapter {
   addComment(taskId: string, comment: string): Promise<void>;
   setStatus(taskId: string, status: TaskStatus): Promise<void>;
 }
+
+export interface ThreadComment {
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface TriggerContext {
+  triggerType: "label" | "comment";
+  triggerComment?: {
+    body: string;
+    author: string;
+  };
+  thread?: ThreadComment[];
+}

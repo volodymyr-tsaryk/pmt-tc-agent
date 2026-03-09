@@ -1,16 +1,63 @@
 // TODO: add a delay before checkDescription to give the author time to write a description
 // In production: use Mastra's built-in step delays or an external queue (e.g. BullMQ)
 
-import { ProjectManagerAdapter, Task } from "../../adapters/interface";
+import { ProjectManagerAdapter, Task, TriggerContext, ThreadComment } from "../../adapters/interface";
 import { ProjectConfig } from "../../config/project";
 import { createTaskAnalyzerAgent } from "../agents/task-analyzer";
-import { logEvent, upsertAgentStatus } from "../../store/event-store";
+import { logEvent, upsertAgentStatus, startRun, addRunStep, completeRun } from "../../store/event-store";
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`[Timeout] ${label} exceeded ${ms}ms`));
+    }, ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
 
 interface CheckDescriptionResult {
   taskId: string;
   task: Task;
   passed: boolean;
   reason: string;
+}
+
+function buildAnalysisPrompt(task: Task): string {
+  return [
+    "Please analyze this task and produce either a Development Plan or Clarifying Questions.",
+    "",
+    `Task ID: ${task.id}`,
+    `Title: ${task.title}`,
+    `Description: ${task.description}`,
+  ].join("\n");
+}
+
+function formatThreadComment(c: ThreadComment): string {
+  return `[${c.author}] ${c.createdAt}: ${c.body}`;
+}
+
+function buildConversationPrompt(task: Task, triggerContext: TriggerContext): string {
+  const threadLines = (triggerContext.thread ?? [])
+    .map(formatThreadComment)
+    .join("\n\n");
+
+  return [
+    "TASK:",
+    `ID: ${task.id}`,
+    `Title: ${task.title}`,
+    `Description: ${task.description}`,
+    "",
+    "COMMENT THREAD (oldest first):",
+    threadLines || "(no previous comments)",
+    "",
+    `TRIGGERING COMMENT (by ${triggerContext.triggerComment?.author ?? "unknown"}):`,
+    triggerContext.triggerComment?.body ?? "",
+    "",
+    "Please respond using your CONVERSATION MODE instructions.",
+  ].join("\n");
 }
 
 /**
@@ -74,17 +121,50 @@ async function checkDescription(
 async function analyzeOrRemind(
   result: CheckDescriptionResult,
   adapter: ProjectManagerAdapter,
-  config: ProjectConfig
-): Promise<void> {
+  config: ProjectConfig,
+  agentName: string,
+  triggerContext?: TriggerContext
+): Promise<string> {
   const { taskId, task, passed, reason } = result;
 
   if (passed) {
     logEvent("workflow", `task ${taskId} passed — running agent`, { taskId });
     const agent = createTaskAnalyzerAgent(config, adapter);
-    await agent.generate(
-      `Please analyze this task and produce either a Development Plan or Clarifying Questions.\n\nTask ID: ${taskId}\nTitle: ${task.title}\nDescription: ${task.description}`
+    const userMessage =
+      triggerContext?.triggerType === "comment"
+        ? buildConversationPrompt(task, triggerContext)
+        : buildAnalysisPrompt(task);
+
+    const runId = startRun(agentName, taskId, userMessage);
+
+    await withTimeout(
+      agent.generate(userMessage, {
+        onStepFinish: (step: unknown) => {
+          const s = step as {
+            text?: string;
+            toolCalls?: Array<{ toolName: string; args: unknown }>;
+            toolResults?: Array<{ toolName: string; result: unknown }>;
+          };
+          addRunStep(agentName, runId, {
+            timestamp: new Date().toISOString(),
+            assistantText: s.text ?? "",
+            toolCalls: (s.toolCalls ?? []).map((tc) => ({
+              toolName: tc.toolName,
+              args: tc.args,
+            })),
+            toolResults: (s.toolResults ?? []).map((tr) => ({
+              toolName: tr.toolName,
+              result: tr.result,
+            })),
+          });
+        },
+      }),
+      120_000,
+      "agent.generate"
     );
+
     logEvent("agent", `generated response for task ${taskId}`, { taskId });
+    return runId;
   } else {
     logEvent("workflow", `task ${taskId} did not pass — posting reminder`, { taskId, level: "warn" });
     const reminder =
@@ -93,8 +173,10 @@ async function analyzeOrRemind(
       `Please update the task description (minimum ${config.reviewCriteria.minDescriptionLength} characters) ` +
       `and ensure the following fields are filled in: ${config.reviewCriteria.requiredFields.join(", ")}.`;
 
+    const runId = startRun(agentName, taskId, "");
     await adapter.addComment(taskId, reminder);
     await adapter.setStatus(taskId, "needs_clarification");
+    return runId;
   }
 }
 
@@ -117,7 +199,7 @@ export function createReviewTaskWorkflow(
   const agentName = `TaskAnalyzer-${config.name}`;
 
   return {
-    async run(taskId: string): Promise<void> {
+    async run(taskId: string, triggerContext?: TriggerContext): Promise<void> {
       upsertAgentStatus(agentName, {
         adapter: adapterName,
         lastStatus: "processing",
@@ -126,16 +208,19 @@ export function createReviewTaskWorkflow(
       });
       logEvent("workflow", `started review for ${taskId}`, { taskId, adapter: adapterName });
 
+      let runId: string | null = null;
       try {
         const checkResult = await checkDescription(taskId, adapter, config);
         logEvent("workflow", `checkDescription: passed=${checkResult.passed}, reason="${checkResult.reason}"`, { taskId });
 
-        await analyzeOrRemind(checkResult, adapter, config);
+        runId = await analyzeOrRemind(checkResult, adapter, config, agentName, triggerContext);
 
         const finalStatus = checkResult.passed ? "plan_written" : "needs_clarification";
+        completeRun(agentName, runId, finalStatus);
         upsertAgentStatus(agentName, { lastStatus: finalStatus });
         logEvent("workflow", `completed — status: ${finalStatus}`, { taskId, adapter: adapterName });
       } catch (err) {
+        if (runId) completeRun(agentName, runId, "error");
         upsertAgentStatus(agentName, { lastStatus: "error" });
         logEvent("workflow", `error: ${err instanceof Error ? err.message : String(err)}`, { taskId, level: "error" });
         throw err;

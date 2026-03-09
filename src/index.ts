@@ -16,6 +16,20 @@ if (!process.env.GITHUB_TOKEN) {
   );
 }
 
+if (process.env.GITHUB_TOKEN && !process.env.GITHUB_WEBHOOK_SECRET) {
+  console.error(
+    "[Agent] ERROR: GITHUB_TOKEN is set but GITHUB_WEBHOOK_SECRET is not.\n" +
+    "Set GITHUB_WEBHOOK_SECRET in .env to verify webhook signatures."
+  );
+  process.exit(1);
+}
+
+if (process.env.GITHUB_TOKEN && !process.env.GITHUB_BOT_USERNAME) {
+  console.warn(
+    "[Agent] WARNING: GITHUB_BOT_USERNAME is not set — agent may reply to its own comments in an infinite loop"
+  );
+}
+
 import net from "net";
 import { createServer } from "./server";
 

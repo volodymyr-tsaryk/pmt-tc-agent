@@ -1,6 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import matter from "gray-matter";
-import { ProjectManagerAdapter, Task, TaskStatus } from "./interface";
+import { ProjectManagerAdapter, Task, TaskStatus, ThreadComment } from "./interface";
 import { ProjectConfig, defaultProjectConfig } from "../config/project";
 
 export class GitHubAdapter implements ProjectManagerAdapter {
@@ -98,6 +98,31 @@ export class GitHubAdapter implements ProjectManagerAdapter {
     }
 
     console.log(`[GitHubAdapter] Label "${labelToAdd}" added to ${taskId}`);
+  }
+
+  async getComments(taskId: string): Promise<ThreadComment[]> {
+    console.log(`[GitHubAdapter] getComments("${taskId}")`);
+    const { owner, repo, issueNumber } = this.parseTaskId(taskId);
+
+    const MAX_THREAD_COMMENTS = 50;
+    const { data: comments } = await this.octokit.rest.issues.listComments({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      per_page: MAX_THREAD_COMMENTS,
+    });
+
+    if (comments.length === MAX_THREAD_COMMENTS) {
+      console.warn(
+        `[GitHubAdapter] Thread for ${taskId} may be truncated at ${MAX_THREAD_COMMENTS} comments — TODO: implement smart window`
+      );
+    }
+
+    return comments.map((c) => ({
+      author: c.user?.login ?? "unknown",
+      body: c.body ?? "",
+      createdAt: c.created_at,
+    }));
   }
 
   async fetchRepoConfig(owner: string, repo: string): Promise<ProjectConfig> {

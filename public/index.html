@@ -187,6 +187,166 @@
       color: #4a5568;
       font-size: 13px;
     }
+
+    .view-history-link {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 10px;
+      color: #63b3ed;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .view-history-link:hover { text-decoration: underline; }
+
+    .run-list { display: flex; flex-direction: column; gap: 12px; }
+
+    .run-section {
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .run-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #242736;
+      cursor: pointer;
+      user-select: none;
+      font-size: 11px;
+    }
+
+    .run-header:hover { background: #2d3244; }
+
+    .run-latest-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: #2b4c7e;
+      color: #63b3ed;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .run-task-id { color: #63b3ed; font-weight: 600; }
+
+    .run-time { color: #4a5568; margin-left: auto; }
+
+    .run-body {
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 11px;
+    }
+
+    .run-body.collapsed { display: none; }
+
+    .step-user {
+      background: #1a202c;
+      border-left: 3px solid #4a5568;
+      padding: 6px 10px;
+      color: #a0aec0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    .step-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 3px;
+    }
+
+    .step-tool-call {
+      background: #2d2000;
+      border-left: 3px solid #ecc94b;
+      padding: 6px 10px;
+      color: #ecc94b;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    .step-tool-result {
+      background: #1a1d27;
+      border-left: 3px solid #4a5568;
+      padding: 6px 10px;
+      color: #718096;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    .step-assistant {
+      background: #0d2137;
+      border-left: 3px solid #4299e1;
+      padding: 6px 10px;
+      color: #90cdf4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: #1a1d27;
+      border: 1px solid #2d3748;
+      border-radius: 10px;
+      width: min(640px, 90vw);
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid #2d3748;
+      flex-shrink: 0;
+    }
+
+    .modal-title { font-size: 13px; font-weight: 600; color: #f8fafc; }
+
+    .modal-close {
+      font-size: 18px;
+      color: #718096;
+      cursor: pointer;
+      line-height: 1;
+      user-select: none;
+    }
+
+    .modal-close:hover { color: #f8fafc; }
+
+    .modal-body {
+      overflow-y: auto;
+      padding: 16px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: #cbd5e0;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
@@ -197,6 +357,16 @@
       <span>live</span>
     </div>
   </header>
+
+  <div class="modal-overlay" id="prompt-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-title">Run History</span>
+        <span class="modal-close" id="modal-close">✕</span>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
 
   <div class="layout">
     <aside class="sidebar">
@@ -228,6 +398,143 @@
     const POLL_INTERVAL = 3000;
     let lastLogId = 0;
     let autoScroll = true;
+
+    const promptModal = document.getElementById('prompt-modal');
+    const modalBody = document.getElementById('modal-body');
+
+    function openHistoryModal(agent) {
+      document.getElementById('modal-title').textContent =
+        (agent.adapter || agent.name) + ' — Run History';
+      modalBody.textContent = '';
+
+      const runs = (agent.runs || []).slice().reverse(); // newest first
+
+      if (!runs.length) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'color:#4a5568;font-size:13px;padding:16px;text-align:center;';
+        empty.textContent = 'No runs yet.';
+        modalBody.appendChild(empty);
+        promptModal.classList.add('open');
+        return;
+      }
+
+      const list = document.createElement('div');
+      list.className = 'run-list';
+
+      runs.forEach(function (run, idx) {
+        const isLatest = idx === 0;
+
+        const section = document.createElement('div');
+        section.className = 'run-section';
+
+        // Header
+        const hdr = document.createElement('div');
+        hdr.className = 'run-header';
+
+        if (isLatest) {
+          const badge = document.createElement('span');
+          badge.className = 'run-latest-badge';
+          badge.textContent = 'latest';
+          hdr.appendChild(badge);
+        }
+
+        const taskSpan = document.createElement('span');
+        taskSpan.className = 'run-task-id';
+        taskSpan.textContent = run.taskId;
+
+        const statusBadge = document.createElement('span');
+        statusBadge.className = 'status-label label-' + escHtml(run.status || 'idle');
+        statusBadge.textContent = (run.status || 'running').replace(/_/g, ' ');
+
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'run-time';
+        timeSpan.textContent = formatTime(run.startedAt);
+
+        hdr.appendChild(taskSpan);
+        hdr.appendChild(statusBadge);
+        hdr.appendChild(timeSpan);
+
+        // Body
+        const body = document.createElement('div');
+        body.className = isLatest ? 'run-body' : 'run-body collapsed';
+
+        // User message
+        if (run.userMessage) {
+          const userBlock = document.createElement('div');
+          userBlock.className = 'step-user';
+          const lbl = document.createElement('div');
+          lbl.className = 'step-label';
+          lbl.textContent = 'User message';
+          const txt = document.createElement('div');
+          txt.textContent = run.userMessage;
+          userBlock.appendChild(lbl);
+          userBlock.appendChild(txt);
+          body.appendChild(userBlock);
+        }
+
+        // Steps
+        (run.steps || []).forEach(function (step) {
+          (step.toolCalls || []).forEach(function (tc) {
+            const block = document.createElement('div');
+            block.className = 'step-tool-call';
+            const lbl = document.createElement('div');
+            lbl.className = 'step-label';
+            lbl.textContent = 'Tool call: ' + tc.toolName;
+            const txt = document.createElement('div');
+            txt.textContent = JSON.stringify(tc.args, null, 2);
+            block.appendChild(lbl);
+            block.appendChild(txt);
+            body.appendChild(block);
+          });
+
+          (step.toolResults || []).forEach(function (tr) {
+            const block = document.createElement('div');
+            block.className = 'step-tool-result';
+            const lbl = document.createElement('div');
+            lbl.className = 'step-label';
+            lbl.textContent = 'Result: ' + tr.toolName;
+            const txt = document.createElement('div');
+            txt.textContent = JSON.stringify(tr.result, null, 2);
+            block.appendChild(lbl);
+            block.appendChild(txt);
+            body.appendChild(block);
+          });
+
+          if (step.assistantText) {
+            const block = document.createElement('div');
+            block.className = 'step-assistant';
+            const lbl = document.createElement('div');
+            lbl.className = 'step-label';
+            lbl.textContent = 'Assistant';
+            const txt = document.createElement('div');
+            txt.textContent = step.assistantText;
+            block.appendChild(lbl);
+            block.appendChild(txt);
+            body.appendChild(block);
+          }
+        });
+
+        hdr.addEventListener('click', function () {
+          body.classList.toggle('collapsed');
+        });
+
+        section.appendChild(hdr);
+        section.appendChild(body);
+        list.appendChild(section);
+      });
+
+      modalBody.appendChild(list);
+      promptModal.classList.add('open');
+    }
+
+    function closePromptModal() {
+      promptModal.classList.remove('open');
+    }
+
+    document.getElementById('modal-close').addEventListener('click', closePromptModal);
+    promptModal.addEventListener('click', function(e) {
+      if (e.target === promptModal) closePromptModal();
+    });
 
     function formatTime(iso) {
       return new Date(iso).toLocaleTimeString('en-GB', { hour12: false });
@@ -289,6 +596,17 @@
 
         card.appendChild(header);
         card.appendChild(meta);
+
+        if (a.runs && a.runs.length) {
+          const link = document.createElement('span');
+          link.className = 'view-history-link';
+          link.textContent = 'view history (' + a.runs.length + ')';
+          link.addEventListener('click', function () {
+            openHistoryModal(a);
+          });
+          card.appendChild(link);
+        }
+
         container.appendChild(card);
       });
     }
