@@ -115,13 +115,22 @@ export function createServer(): express.Application {
           return;
         }
 
+        if (!payload?.issue?.number || !payload?.repository?.owner?.login || !payload?.repository?.name) {
+          res.status(400).json({ error: "Malformed payload: missing issue or repository fields" });
+          return;
+        }
+
         const owner = payload.repository.owner.login;
         const repo = payload.repository.name;
         const taskId = `${owner}/${repo}#${payload.issue.number}`;
 
         res.status(202).json({ status: "accepted", taskId });
-        const config = await githubAdapter.fetchRepoConfig(owner, repo);
-        await handleTaskEvent(taskId, githubAdapter, config);
+        try {
+          const config = await githubAdapter.fetchRepoConfig(owner, repo);
+          await handleTaskEvent(taskId, githubAdapter, config);
+        } catch (innerError) {
+          console.error(`[Server] GitHub task processing failed for ${taskId}:`, innerError);
+        }
 
       } else if (event === "issue_comment") {
         const payload = req.body as {
@@ -139,13 +148,22 @@ export function createServer(): express.Application {
           return;
         }
 
+        if (!payload?.issue?.number || !payload?.repository?.owner?.login || !payload?.repository?.name) {
+          res.status(400).json({ error: "Malformed payload: missing issue or repository fields" });
+          return;
+        }
+
         const owner = payload.repository.owner.login;
         const repo = payload.repository.name;
         const taskId = `${owner}/${repo}#${payload.issue.number}`;
 
         res.status(202).json({ status: "accepted", taskId });
-        const config = await githubAdapter.fetchRepoConfig(owner, repo);
-        await handleTaskEvent(taskId, githubAdapter, config);
+        try {
+          const config = await githubAdapter.fetchRepoConfig(owner, repo);
+          await handleTaskEvent(taskId, githubAdapter, config);
+        } catch (innerError) {
+          console.error(`[Server] GitHub task processing failed for ${taskId}:`, innerError);
+        }
 
       } else {
         res.status(200).json({ status: "ignored" });
