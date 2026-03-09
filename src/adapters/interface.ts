@@ -1,5 +1,5 @@
 export type TaskStatus = "needs_clarification" | "ready_for_dev";
-export type AdapterSource = "trello" | "asana";
+export type AdapterSource = "trello" | "asana" | "github";
 
 export interface Task {
   id: string;
