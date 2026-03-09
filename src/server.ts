@@ -4,11 +4,19 @@ import { ProjectManagerAdapter } from "./adapters/interface";
 import { ProjectConfig, defaultProjectConfig } from "./config/project";
 import { TrelloAdapter } from "./adapters/trello";
 import { AsanaAdapter } from "./adapters/asana";
+import { GitHubAdapter } from "./adapters/github";
 import { createReviewTaskWorkflow } from "./mastra/workflows/review-task";
 import { getEvents, getAgentStatuses } from "./store/event-store";
 
 const trelloAdapter = new TrelloAdapter();
 const asanaAdapter = new AsanaAdapter();
+const githubAdapter = process.env.GITHUB_TOKEN
+  ? new GitHubAdapter(
+      process.env.GITHUB_TOKEN,
+      process.env.GITHUB_TRIGGER_LABEL ?? "ai-review",
+      process.env.GITHUB_MENTION ?? "@task-ai"
+    )
+  : null;
 
 async function handleTaskEvent(
   taskId: string,
@@ -40,7 +48,7 @@ export function createServer(): express.Application {
 
   // Health check
   app.get("/health", (_req: Request, res: Response) => {
-    res.json({ status: "ok", adapters: ["trello", "asana"] });
+    res.json({ status: "ok", adapters: ["trello", "asana", ...(githubAdapter ? ["github"] : [])] });
   });
 
   app.get("/api/status", (_req: Request, res: Response) => {
@@ -80,6 +88,70 @@ export function createServer(): express.Application {
       await handleTaskEvent(taskId, asanaAdapter, defaultProjectConfig);
     } catch (error) {
       console.error("[Server] Error processing Asana webhook:", error);
+    }
+  });
+
+  // GitHub webhook
+  app.post("/webhook/github", async (req: Request, res: Response) => {
+    // TODO: verify X-Hub-Signature-256
+    if (!githubAdapter) {
+      res.status(503).json({ error: "GitHub integration not configured (missing GITHUB_TOKEN)" });
+      return;
+    }
+
+    const event = req.headers["x-github-event"] as string | undefined;
+
+    try {
+      if (event === "issues") {
+        const payload = req.body as {
+          action: string;
+          label?: { name: string };
+          issue: { number: number };
+          repository: { name: string; owner: { login: string } };
+        };
+
+        if (payload.action !== "labeled" || payload.label?.name !== githubAdapter.triggerLabel) {
+          res.status(200).json({ status: "ignored" });
+          return;
+        }
+
+        const owner = payload.repository.owner.login;
+        const repo = payload.repository.name;
+        const taskId = `${owner}/${repo}#${payload.issue.number}`;
+        const config = await githubAdapter.fetchRepoConfig(owner, repo);
+
+        res.status(202).json({ status: "accepted", taskId });
+        await handleTaskEvent(taskId, githubAdapter, config);
+
+      } else if (event === "issue_comment") {
+        const payload = req.body as {
+          action: string;
+          comment: { body: string };
+          issue: { number: number };
+          repository: { name: string; owner: { login: string } };
+        };
+
+        if (
+          payload.action !== "created" ||
+          !payload.comment.body.includes(githubAdapter.mention)
+        ) {
+          res.status(200).json({ status: "ignored" });
+          return;
+        }
+
+        const owner = payload.repository.owner.login;
+        const repo = payload.repository.name;
+        const taskId = `${owner}/${repo}#${payload.issue.number}`;
+        const config = await githubAdapter.fetchRepoConfig(owner, repo);
+
+        res.status(202).json({ status: "accepted", taskId });
+        await handleTaskEvent(taskId, githubAdapter, config);
+
+      } else {
+        res.status(200).json({ status: "ignored" });
+      }
+    } catch (error) {
+      console.error("[Server] Error processing GitHub webhook:", error);
     }
   });
 
