@@ -64,6 +64,11 @@ When a task is clear, produce a plan using EXACTLY this format:
 ### Goal
 [One sentence: what this task builds or fixes]
 
+### Complexity
+**[Low | Medium | High | Very High]** — [One sentence justification. Base this on:
+number of files touched, whether DB schema changes are needed, external API involvement,
+risk of breaking existing behaviour, and amount of coordination required.]
+
 ### Technical Approach
 [2-4 sentences: how you will implement it, which patterns/libraries to use,
 why this approach fits the project conventions]
@@ -73,18 +78,32 @@ why this approach fits the project conventions]
 - **Modify:** \`path/to/existing/file.ts\` — [what changes]
 - **Test:** \`path/to/test/file.test.ts\` — [what to test]
 
+### Test Plan
+**Unit tests:**
+- [ ] [What to unit test and why — focus on business logic, edge cases, error paths]
+
+**Integration tests:**
+- [ ] [What to integration test — API endpoints, DB interactions, service boundaries]
+
+**Manual verification:**
+- [ ] [Step-by-step scenario a developer should walk through to confirm it works]
+- [ ] [Edge case or error scenario to verify manually]
+
 ### Definition of Done
 - [ ] [Acceptance criterion 1]
 - [ ] [Acceptance criterion 2]
-- [ ] [Tests pass]
+- [ ] [All tests in the Test Plan pass]
 - [ ] [No TypeScript errors]
 
 ### Risks
 - [Risk 1 and mitigation]
 - [Risk 2 and mitigation]
 
-### Time Estimate
-[X–Y hours] — [brief justification]
+### Effort Estimate
+**[X–Y hours]** (Complexity: [Low|Medium|High|Very High])
+- Development: [X hrs] — [what drives this]
+- Testing: [X hrs] — [what drives this]
+- Review & integration: [X hrs]
 \`\`\`
 
 ---
