@@ -23,15 +23,77 @@ export class GitHubAdapter implements ProjectManagerAdapter {
     return { owner: match[1], repo: match[2], issueNumber: parseInt(match[3], 10) };
   }
 
-  async getTask(_taskId: string): Promise<Task> {
-    throw new Error("Not implemented");
+  async getTask(taskId: string): Promise<Task> {
+    console.log(`[GitHubAdapter] getTask("${taskId}")`);
+    const { owner, repo, issueNumber } = this.parseTaskId(taskId);
+
+    const { data: issue } = await this.octokit.rest.issues.get({
+      owner,
+      repo,
+      issue_number: issueNumber,
+    });
+
+    return {
+      id: taskId,
+      title: issue.title,
+      description: issue.body ?? "",
+      assignee: issue.assignee?.login ?? null,
+      labels: issue.labels.map((l) => (typeof l === "string" ? l : l.name ?? "")),
+      url: issue.html_url,
+      source: "github",
+      metadata: {
+        owner,
+        repo,
+        issueNumber,
+        state: issue.state,
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
+      },
+    };
   }
 
-  async addComment(_taskId: string, _comment: string): Promise<void> {
-    throw new Error("Not implemented");
+  async addComment(taskId: string, comment: string): Promise<void> {
+    console.log(`[GitHubAdapter] addComment("${taskId}", "${comment.substring(0, 80)}...")`);
+    const { owner, repo, issueNumber } = this.parseTaskId(taskId);
+
+    await this.octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      body: comment,
+    });
+
+    console.log(`[GitHubAdapter] Comment posted to ${taskId}`);
   }
 
-  async setStatus(_taskId: string, _status: TaskStatus): Promise<void> {
-    throw new Error("Not implemented");
+  async setStatus(taskId: string, status: TaskStatus): Promise<void> {
+    console.log(`[GitHubAdapter] setStatus("${taskId}", "${status}")`);
+    const { owner, repo, issueNumber } = this.parseTaskId(taskId);
+
+    const labelToAdd = status === "needs_clarification" ? "needs-clarification" : "ready-for-dev";
+    const labelToRemove = status === "needs_clarification" ? "ready-for-dev" : "needs-clarification";
+
+    // Add the new label
+    await this.octokit.rest.issues.addLabels({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      labels: [labelToAdd],
+    });
+
+    // Remove the conflicting label — ignore 404 (label wasn't on the issue)
+    try {
+      await this.octokit.rest.issues.removeLabel({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        name: labelToRemove,
+      });
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      if (status !== 404) throw err;
+    }
+
+    console.log(`[GitHubAdapter] Label "${labelToAdd}" added to ${taskId}`);
   }
 }
